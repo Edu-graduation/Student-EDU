@@ -1,0 +1,703 @@
+import { supaClient } from "./app.js";
+const pageTitle = document.querySelector(".page-title");
+const courseId = sessionStorage.getItem("courseId");
+const studentId = sessionStorage.getItem("studentId");
+
+// Function to show interactive toast notifications
+function showToast(message, type = "success") {
+  // Create toast container if it doesn't exist
+  let toastContainer = document.querySelector(".toast-container");
+  if (!toastContainer) {
+    toastContainer = document.createElement("div");
+    toastContainer.className = "toast-container";
+    document.body.appendChild(toastContainer);
+  }
+
+  // Create and display toast
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `
+    <span>${message}</span>
+    <span class="toast-close">&times;</span>
+  `;
+
+  // Add click event to close toast
+  toast.addEventListener("click", () => {
+    toast.classList.add("toast-hiding");
+    setTimeout(() => toast.remove(), 300);
+  });
+
+  toastContainer.appendChild(toast);
+
+  // Auto-remove toast after 3 seconds
+  setTimeout(() => {
+    if (toast.parentNode) {
+      toast.classList.add("toast-hiding");
+      setTimeout(() => toast.remove(), 300);
+    }
+  }, 3000);
+}
+
+// Function to show loading spinner
+function showLoadingSpinner(button, isLoading = true) {
+  if (isLoading) {
+    const originalText = button.textContent;
+    button.setAttribute("data-original-text", originalText);
+    button.innerHTML = `
+      <span class="spinner"></span>
+      <span>Uploading...</span>
+    `;
+    button.disabled = true;
+  } else {
+    const originalText = button.getAttribute("data-original-text") || "Submit";
+    button.textContent = originalText;
+    button.disabled = false;
+  }
+}
+
+// Check if date has passed
+function isDatePassed(dateString) {
+  const dueDate = new Date(dateString);
+  const today = new Date();
+  return today > dueDate;
+}
+
+// Format date for better display
+function formatDate(dateString) {
+  const options = {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  };
+  return new Date(dateString).toLocaleDateString(undefined, options);
+}
+
+async function getCourseName() {
+  const { data, error } = await supaClient
+    .from("course")
+    .select("*")
+    .eq("course_id", courseId);
+
+  if (error) {
+    console.error("Error fetching course name:", error);
+    showToast("Failed to load course information", "error");
+    return;
+  }
+
+  if (data && data.length > 0) {
+    pageTitle.textContent = `${data[0].course_name} Projects`;
+  }
+}
+
+async function alreadyUploadedActivities() {
+  const { data, error } = await supaClient
+    .from("student_activity")
+    .select("*")
+    .eq("student_id", studentId)
+    .neq("activity_path", null);
+
+  if (error) {
+    console.error("Error fetching uploaded activities:", error);
+    showToast("Failed to check for existing submissions", "error");
+    return [];
+  }
+
+  console.log("Already uploaded activities:", data);
+  return data || [];
+}
+
+async function getCourseActivities() {
+  await getCourseName();
+
+  // First get the course_activity records
+  const { data: courseActivityData, error: courseActivityError } =
+    await supaClient
+      .from("course_activity")
+      .select("*")
+      .eq("course_id", courseId);
+
+  if (courseActivityError) {
+    console.error("Error fetching course activities:", courseActivityError);
+    showToast("Failed to load course activities", "error");
+    return [];
+  }
+
+  if (!courseActivityData || courseActivityData.length === 0) {
+    return [];
+  }
+
+  // Get all activity IDs for this course
+  const activityIds = courseActivityData.map((ca) => ca.activity_id);
+
+  // Fetch the actual activity details
+  const { data: activities, error: activitiesError } = await supaClient
+    .from("activity")
+    .select("*")
+    .in("activity_id", activityIds);
+
+  if (activitiesError) {
+    console.error("Error fetching activities:", activitiesError);
+    showToast("Failed to load activities", "error");
+    return [];
+  }
+
+  return activities || [];
+}
+
+async function renderActivities() {
+  const activitiesContainer = document.querySelector(".projects-container");
+
+  // Show loading state
+  activitiesContainer.innerHTML = `
+    <div class="loading-activities">
+      <div class="loading-spinner"></div>
+      <p>Loading projects...</p>
+    </div>
+  `;
+
+  const activities = await getCourseActivities();
+  const uploadedActivities = await alreadyUploadedActivities();
+
+  if (activities.length === 0) {
+    activitiesContainer.innerHTML = `<h2 class="empty">No projects yet for this course</h2>`;
+    return;
+  }
+
+  let markup = "";
+  activities.sort(
+    (a, b) => new Date(b.activity_duedate) - new Date(a.activity_duedate)
+  );
+  activities.forEach((activity, index) => {
+    // Check if this activity has already been uploaded by the student
+    const isUploaded = uploadedActivities.some(
+      (uploaded) =>
+        uploaded.activity_id === activity.activity_id &&
+        uploaded.student_id === studentId
+    );
+
+    // Get the uploaded file path if it exists
+    const uploadedActivity = uploadedActivities.find(
+      (uploaded) =>
+        uploaded.activity_id === activity.activity_id &&
+        uploaded.student_id === studentId
+    );
+
+    const uploadedFilePath = uploadedActivity
+      ? uploadedActivity.activity_path
+      : null;
+
+    // Extract just the filename from the path for display
+    const uploadedFileName = uploadedFilePath
+      ? decodeURIComponent(
+          uploadedFilePath.substring(uploadedFilePath.lastIndexOf("/") + 1)
+        )
+      : "";
+
+    // Check if due date has passed
+    const dueDatePassed = isDatePassed(activity.activity_duedate);
+    const dueDateFormatted = formatDate(activity.activity_duedate);
+
+    // Determine due date class
+    let dueDateClass = "ok";
+    const today = new Date();
+    const dueDate = new Date(activity.activity_duedate);
+    const daysUntilDue = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+
+    if (dueDatePassed) {
+      dueDateClass = "overdue";
+    } else if (daysUntilDue <= 3) {
+      dueDateClass = "upcoming";
+    }
+
+    markup += `<div class="project-box ${
+      dueDatePassed ? "disabled" : "active"
+    }">
+        <h3 class="project-title">${activity.activity_title}</h3>
+        <p class="project-description">${activity.activity_description}</p>
+        <hr class="project-divider" style="background-color:${
+          dueDatePassed ? "#F44336" : "#5955B3"
+        };" />
+        <div class="due-date ${dueDateClass}">
+         <i
+           class="fi fi-rr-calendar-clock" style="margin-right: 8px; color:${
+             dueDatePassed ? "#F44336" : "#5955B3"
+           }; font-size: 20px;"
+          ></i>
+          <span>Due: ${dueDateFormatted}</span>
+          ${
+            dueDatePassed && !isUploaded
+              ? `<span style="margin-left: auto; font-weight: bold; color: #F44336;">OVERDUE</span>`
+              : ""
+          }
+        </div>
+<button class="instructions-btn" style="border-color:${
+      dueDatePassed ? "#f9bec3" : "#5955B3"
+    }"data-activity-id="${activity.activity_id}">
+          <i class="fi fi-rr-document-signed" style="margin-right: 5px;color:${
+            dueDatePassed ? "#f9bec3" : "#5955B3"
+          }"></i>
+         View Instructions
+        </button>
+        
+        ${
+          isUploaded
+            ? `<div class="upload-status success">
+             <i class="fi fi-rr-check-circle" style="font-size: 18px;"></i>
+             <span>
+               <strong>File:</strong> ${uploadedFileName.split("-").pop()}
+             </span>
+             <a href="${uploadedFilePath}" target="_blank" class="view-submission">View</a>
+           </div>`
+            : ""
+        }
+        
+        ${
+          !isUploaded && dueDatePassed
+            ? `<div class="upload-status error" style="margin-top: 15px; background-color: rgba(244, 67, 54, 0.1); color: #F44336;">
+              <i class="fi fi-rr-exclamation-circle" style="font-size: 18px;"></i>
+              <span>Submission closed. Due date has passed.</span>
+            </div>`
+            : ""
+        }
+        
+        <div class="file-selection-area" id="file-area-${index}" style="display: ${
+      isUploaded || dueDatePassed ? "none" : "block"
+    };">
+          <label
+            class="custum-file-upload"
+            for="file-${index}"
+          >
+            <div class="icon">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill=""
+                viewBox="0 0 24 24"
+              >
+                <g stroke-width="0" id="SVGRepo_bgCarrier"></g>
+                <g
+                  stroke-linejoin="round"
+                  stroke-linecap="round"
+                  id="SVGRepo_tracerCarrier"
+                ></g>
+                <g id="SVGRepo_iconCarrier">
+                  <path
+                    fill=""
+                    d="M10 1C9.73478 1 9.48043 1.10536 9.29289 1.29289L3.29289 7.29289C3.10536 7.48043 3 7.73478 3 8V20C3 21.6569 4.34315 23 6 23H7C7.55228 23 8 22.5523 8 22C8 21.4477 7.55228 21 7 21H6C5.44772 21 5 20.5523 5 20V9H10C10.5523 9 11 8.55228 11 8V3H18C18.5523 3 19 3.44772 19 4V9C19 9.55228 19.4477 10 20 10C20.5523 10 21 9.55228 21 9V4C21 2.34315 19.6569 1 18 1H10ZM9 7H6.41421L9 4.41421V7ZM14 15.5C14 14.1193 15.1193 13 16.5 13C17.8807 13 19 14.1193 19 15.5V16V17H20C21.1046 17 22 17.8954 22 19C22 20.1046 21.1046 21 20 21H13C11.8954 21 11 20.1046 11 19C11 17.8954 11.8954 17 13 17H14V16V15.5ZM16.5 11C14.142 11 12.2076 12.8136 12.0156 15.122C10.2825 15.5606 9 17.1305 9 19C9 21.2091 10.7909 23 13 23H20C22.2091 23 24 21.2091 24 19C24 17.1305 22.7175 15.5606 20.9844 15.122C20.7924 12.8136 18.858 11 16.5 11Z"
+                    clip-rule="evenodd"
+                    fill-rule="evenodd"
+                  ></path>
+                </g>
+              </svg>
+            </div>
+            <div class="text">
+              <span>Click to upload project</span>
+            </div>
+            <input class="file__input" type="file" id="file-${index}" data-file="${index}" data-activity-id="${
+      activity.activity_id
+    }" />
+          </label>
+          
+          <div class="file-preview" id="file-preview-${index}" style="display: none;"></div>
+          
+          <button class="submit-btn" data-btn-file="${index}" data-activity-id="${
+      activity.activity_id
+    }">
+            Submit
+          </button>
+        </div>
+      </div>`;
+  });
+
+  activitiesContainer.innerHTML = markup;
+
+  // Add event listeners to all submit buttons and file inputs
+  const uploadBtns = document.querySelectorAll(".submit-btn");
+  const fileInputs = document.querySelectorAll(".file__input");
+
+  uploadBtns.forEach((btn) => {
+    btn.addEventListener("click", uploadFile);
+  });
+
+  fileInputs.forEach((input) => {
+    // Add drag and drop functionality
+    const uploadArea = input.parentElement;
+
+    // Handle file selection
+    input.addEventListener("change", (e) => {
+      const fileIndex = e.target.dataset.file;
+      const previewArea = document.getElementById(`file-preview-${fileIndex}`);
+
+      if (e.target.files && e.target.files.length > 0) {
+        const file = e.target.files[0];
+        const fileName = file.name;
+        const fileSize = (file.size / 1024).toFixed(2);
+
+        // Show file icon based on type
+        let fileIcon = "fi-rr-file";
+        const fileExt = fileName.split(".").pop().toLowerCase();
+
+        if (["pdf"].includes(fileExt)) {
+          fileIcon = "fi-rr-file-pdf";
+        } else if (["doc", "docx"].includes(fileExt)) {
+          fileIcon = "fi-rr-file-word";
+        } else if (["xls", "xlsx"].includes(fileExt)) {
+          fileIcon = "fi-rr-file-excel";
+        } else if (["ppt", "pptx"].includes(fileExt)) {
+          fileIcon = "fi-rr-file-powerpoint";
+        } else if (["jpg", "jpeg", "png", "gif"].includes(fileExt)) {
+          fileIcon = "fi-rr-file-image";
+        } else if (["zip", "rar", "7z"].includes(fileExt)) {
+          fileIcon = "fi-rr-file-archive";
+        }
+
+        previewArea.innerHTML = `
+          <div class="file-info">
+            <i class="fi ${fileIcon}" style="color: #5955b3; font-size: 18px;"></i>
+            <span class="file-name">${fileName}</span>
+            <span class="file-size">(${fileSize} KB)</span>
+            <span class="remove-file" data-file-index="${fileIndex}">✕</span>
+          </div>
+        `;
+        previewArea.style.display = "block";
+        uploadArea.style.borderColor = "#4CAF50";
+        uploadArea.style.backgroundColor = "rgba(76, 175, 80, 0.05)";
+
+        // Add event listener to remove file button
+        const removeBtn = previewArea.querySelector(".remove-file");
+        removeBtn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          input.value = "";
+          previewArea.style.display = "none";
+          uploadArea.style.borderColor = "#5955b3";
+          uploadArea.style.backgroundColor = "rgba(89, 85, 179, 0.05)";
+        });
+      } else {
+        previewArea.style.display = "none";
+        uploadArea.style.borderColor = "#5955b3";
+        uploadArea.style.backgroundColor = "rgba(89, 85, 179, 0.05)";
+      }
+    });
+
+    // Drag and drop events
+    uploadArea.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      uploadArea.style.borderColor = "#4a478f";
+      uploadArea.style.backgroundColor = "rgba(89, 85, 179, 0.15)";
+    });
+
+    uploadArea.addEventListener("dragleave", (e) => {
+      e.preventDefault();
+      uploadArea.style.borderColor = "#5955b3";
+      uploadArea.style.backgroundColor = "rgba(89, 85, 179, 0.05)";
+    });
+
+    uploadArea.addEventListener("drop", (e) => {
+      e.preventDefault();
+      uploadArea.style.borderColor = "#5955b3";
+      uploadArea.style.backgroundColor = "rgba(89, 85, 179, 0.05)";
+
+      if (e.dataTransfer.files.length) {
+        input.files = e.dataTransfer.files;
+        input.dispatchEvent(new Event("change"));
+      }
+    });
+  });
+
+  // Add event listeners to view instructions buttons
+  const instructionBtns = document.querySelectorAll(".instructions-btn");
+  instructionBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const activityId = btn.dataset.activityId;
+      const activity = activities.find((a) => a.activity_id === +activityId);
+
+      if (activity) {
+        // Create modal for instructions
+        const modal = document.createElement("div");
+        modal.className = "instructions-modal";
+        modal.innerHTML = `
+          <div class="modal-content">
+            <div class="modal-header">
+              <h2>${activity.activity_title} - Instructions</h2>
+              <span class="modal-close">&times;</span>
+            </div>
+            <div class="modal-body">
+              <div class="instruction-details">
+                <p><strong>Due Date:</strong> ${formatDate(
+                  activity.activity_duedate
+                )}</p>
+                <div class="instruction-text">
+                  ${activity.activity_description}
+                </div>
+                ${
+                  isDatePassed(activity.activity_duedate)
+                    ? `<div class="overdue-notice" style="margin-top: 20px; padding: 10px; background-color: rgba(244, 67, 54, 0.1); color: #F44336; border-radius: 8px;">
+                        <strong>Note:</strong> The due date for this project has passed. Submissions are no longer accepted.
+                      </div>`
+                    : ""
+                }
+              </div>
+            </div>
+          </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // Add modal styles if not already added
+        if (!document.querySelector(".modal-styles")) {
+          const modalStyles = document.createElement("style");
+          modalStyles.className = "modal-styles";
+          modalStyles.textContent = `
+            .instructions-modal {
+              display: flex;
+              position: fixed;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+              background-color: rgba(0, 0, 0, 0.5);
+              z-index: 1000;
+              justify-content: center;
+              align-items: center;
+              opacity: 0;
+              animation: fadeIn 0.3s ease forwards;
+            }
+            .modal-content {
+              background-color: white;
+              width: 90%;
+              max-width: 600px;
+              border-radius: 12px;
+              overflow: hidden;
+              box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+              transform: translateY(20px);
+              animation: slideUp 0.3s ease forwards;
+            }
+            .modal-header {
+              padding: 20px;
+              background-color: #5955b3;
+              color: white;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            }
+            .modal-header h2 {
+              margin: 0;
+              font-size: 18px;
+              font-weight: 500;
+            }
+            .modal-close {
+              font-size: 24px;
+              cursor: pointer;
+              transition: all 0.2s ease;
+            }
+            .modal-close:hover {
+              transform: scale(1.2);
+            }
+            .modal-body {
+              padding: 20px;
+              max-height: 70vh;
+              overflow-y: auto;
+            }
+            .instruction-details {
+              line-height: 1.6;
+            }
+            .instruction-text {
+              margin-top: 15px;
+              white-space: pre-line;
+            }
+            @keyframes fadeIn {
+              from { opacity: 0; }
+              to { opacity: 1; }
+            }
+            @keyframes slideUp {
+              from { transform: translateY(20px); }
+              to { transform: translateY(0); }
+            }
+            @keyframes slideDown {
+              from { transform: translateY(0); }
+              to { transform: translateY(20px); opacity: 0; }
+            }
+          `;
+          document.head.appendChild(modalStyles);
+        }
+
+        // Close modal on click
+        const closeBtn = modal.querySelector(".modal-close");
+        closeBtn.addEventListener("click", () => {
+          modal.style.opacity = "0";
+          modal.querySelector(".modal-content").style.animation =
+            "slideDown 0.3s ease forwards";
+          setTimeout(() => modal.remove(), 300);
+        });
+
+        // Close modal on outside click
+        modal.addEventListener("click", (e) => {
+          if (e.target === modal) {
+            modal.style.opacity = "0";
+            modal.querySelector(".modal-content").style.animation =
+              "slideDown 0.3s ease forwards";
+            setTimeout(() => modal.remove(), 300);
+          }
+        });
+      }
+    });
+  });
+}
+
+async function uploadFile(e) {
+  const fileIndex = e.target.dataset.btnFile;
+  const activityId = e.target.dataset.activityId;
+  const fileInput = document.getElementById(`file-${fileIndex}`);
+
+  if (!fileInput.files || fileInput.files.length === 0) {
+    showToast("Please select a file to upload", "warning");
+    return;
+  }
+
+  const file = fileInput.files[0];
+
+  // Get activity details to check due date
+  const { data: activityData, error: activityError } = await supaClient
+    .from("activity")
+    .select("*")
+    .eq("activity_id", activityId)
+    .single();
+
+  if (activityError) {
+    console.error("Error fetching activity details:", activityError);
+    showToast("Error checking due date", "error");
+    return;
+  }
+
+  // Check if due date has passed
+  if (isDatePassed(activityData.activity_duedate)) {
+    showToast(
+      "Due date has passed. Submissions are no longer accepted.",
+      "error"
+    );
+    return;
+  }
+
+  // Show loading state
+  showLoadingSpinner(e.target, true);
+
+  try {
+    // First check if this activity was already submitted
+    const { data: existingSubmissions, error: checkError } = await supaClient
+      .from("student_activity")
+      .select("*")
+      .eq("student_id", studentId)
+      .eq("activity_id", activityId)
+      .neq("activity_path", null);
+
+    if (checkError) {
+      console.error("Error checking existing submissions:", checkError);
+      showToast("Error checking submission status", "error");
+      showLoadingSpinner(e.target, false);
+      return;
+    }
+
+    // If already submitted, show message and prevent re-upload
+    if (existingSubmissions && existingSubmissions.length > 0) {
+      showToast("This project has already been submitted", "warning");
+      showLoadingSpinner(e.target, false);
+      // Refresh the activities display to show the submission
+      renderActivities();
+      return;
+    }
+
+    // Create a unique filename with timestamp to prevent overwriting
+    const timestamp = new Date().getTime();
+    const fileName =
+      `${studentId}-${activityId}-${timestamp}-${file.name}`.replaceAll(
+        "/",
+        ""
+      );
+
+    // Define storage path
+    const filePath = fileName;
+
+    // Upload file to storage
+    const { data: uploadData, error: uploadError } = await supaClient.storage
+      .from("students-activities")
+      .upload(filePath, file);
+
+    if (uploadError) {
+      console.error("Error uploading file:", uploadError);
+      showToast("Failed to upload file. Please try again.", "error");
+      showLoadingSpinner(e.target, false);
+      return;
+    }
+
+    // Get public URL for the uploaded file
+    const { data: publicUrl } = supaClient.storage
+      .from("students-activities")
+      .getPublicUrl(filePath);
+
+    // Update database with the file path - removed submission_date
+    const { data: submissionData, error: submissionError } = await supaClient
+      .from("student_activity")
+      .upsert(
+        [
+          {
+            student_id: studentId,
+            activity_id: activityId,
+            activity_path: publicUrl.publicUrl,
+            teamid: 1,
+          },
+        ],
+        { onConflict: ["student_id", "activity_id"] }
+      );
+
+    if (submissionError) {
+      console.error("Error updating database:", submissionError);
+      showToast(
+        "File uploaded but failed to update records. Please contact support.",
+        "warning"
+      );
+      showLoadingSpinner(e.target, false);
+      return;
+    }
+
+    showToast("Project submitted successfully!", "success");
+
+    // Update UI to show success and hide upload controls
+    setTimeout(() => {
+      renderActivities(); // Refresh to show the uploaded file
+    }, 1000);
+  } catch (error) {
+    console.error("Unexpected error during upload:", error);
+    showToast("An unexpected error occurred. Please try again later.", "error");
+    showLoadingSpinner(e.target, false);
+  }
+}
+
+// Initialize page
+document.addEventListener("DOMContentLoaded", () => {
+  // Check if user is logged in
+  if (!studentId || !courseId) {
+    window.location.href = "login.html";
+    return;
+  }
+
+  // Initialize activities view
+  renderActivities();
+
+  // Add navigation event listeners
+  const backButton = document.querySelector(".back-button");
+  if (backButton) {
+    backButton.addEventListener("click", () => {
+      window.location.href = "dashboard.html";
+    });
+  }
+
+  // Add refresh button functionality
+  const refreshButton = document.querySelector(".refresh-button");
+  if (refreshButton) {
+    refreshButton.addEventListener("click", () => {
+      renderActivities();
+      showToast("Projects refreshed", "info");
+    });
+  }
+});

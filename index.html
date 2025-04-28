@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign</title>
+    <link rel="icon" type="image/x-icon" href="src/images/favicon.ico" />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="src/images/favicon-32x32.png"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="16x16"
+      href="src/images/favicon-16x16.png"
+    />
+    <link rel="stylesheet" href="src/css/form.css" />
+  </head>
+
+  <body>
+    <main class="authentcation-container">
+      <div class="container">
+        <!-- Sign-in Section -->
+        <div class="form-section sign-in-form">
+          <div class="form-content">
+            <h1>START YOUR JOURNEY.</h1>
+            <br />
+            <h2 class="form__title">Sign In</h2>
+            <p class="form__subtitle">
+              Don't have an account? <a href="#" id="signUp">Sign up</a>
+            </p>
+            <br /><br />
+            <form id="signInForm" action="home.html">
+              <label class="form__label" for="id">ID</label>
+              <input
+                class="id-input"
+                type="text"
+                id="id"
+                name="id"
+                required
+              /><br />
+
+              <label class="form__label" for="password">PASSWORD</label>
+              <input
+                type="password"
+                id="password"
+                name="password"
+                required
+                minlength="8"
+                maxlength="8"
+              /><br /><br />
+
+              <button class="sign-in-btn" type="submit">Sign In</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Image Section -->
+        <div class="image-section">
+          <div class="edu-container"></div>
+          <img
+            class="background"
+            src="src/images/background.png"
+            alt="Login Image"
+          />
+        </div>
+
+        <!-- Sign-up Section -->
+        <div class="form-section sign-up-form hidden">
+          <div class="form-content">
+            <h2 class="form__title">CREATE ACCOUNT</h2>
+            <br />
+            <p class="form__subtitle">
+              Already have an account? <a href="#" id="signIn">Sign in</a>
+            </p>
+            <br />
+            <form id="signUpForm">
+              <label class="form__label" for="signup-id">ID</label>
+              <input
+                type="text"
+                class="signup-id"
+                name="signup-id"
+                required
+              /><br />
+
+              <label class="form__label" for="signup-password">PASSWORD</label
+              ><br />
+              <input
+                type="password"
+                id="signup-password"
+                name="signup-password"
+                required
+                minlength="8"
+                maxlength="8"
+              /><br />
+
+              <label class="form__label" for="signup-repass">RE-PASSWORD</label
+              ><br />
+              <input
+                type="password"
+                id="signup-repass"
+                name="signup-repass"
+                required
+                minlength="8"
+                maxlength="8"
+              /><br />
+
+              <button class="sign-in-btn" type="submit">Sign Up</button><br />
+            </form>
+          </div>
+        </div>
+      </div>
+    </main>
+    <script>
+      const signUpBtn = document.getElementById("signUp");
+      const signInBtn = document.getElementById("signIn");
+      const imageSection = document.querySelector(".image-section");
+      const signupForm = document.querySelector(".sign-up-form");
+      const signinForm = document.querySelector(".sign-in-form");
+
+      // Switch between forms
+      signUpBtn.addEventListener("click", function (event) {
+        event.preventDefault();
+        imageSection.classList.add("slide-left"); // Slide the image section left
+        signinForm.classList.add("hidden"); // Hide the sign-in form
+        signupForm.classList.remove("hidden"); // Show the sign-up form
+      });
+
+      signInBtn.addEventListener("click", function (event) {
+        event.preventDefault();
+        signupForm.classList.add("hidden"); // Hide the sign-up form
+        imageSection.classList.remove("slide-left"); // Slide back the image section
+        signinForm.classList.remove("hidden"); // Show the sign-in form
+      });
+
+      // Function to validate input
+      // This function checks if the password is at least 8 characters long
+      // and shows an alert if it's not.
+      function validateInput(id, password) {
+        if (password.length < 8) {
+          alert("Password must be at least 8 characters.");
+          return false;
+        }
+        return true;
+      }
+
+      const signInForm = document.getElementById("signInForm");
+      const idInput = document.getElementById("id");
+      const passwordInput = document.getElementById("password");
+
+      const BASE_URL =
+        "https://iuiwdjtmdeempcqxeuhf.supabase.co/rest/v1/student";
+      const API_KEY =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1aXdkanRtZGVlbXBjcXhldWhmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3NTY1MDcsImV4cCI6MjA2MDMzMjUwN30.XfSmnKA8wbsXIA1qkfYaRkzxtEdudIDNYbSJu-M5Zag"; // خليك حاطط الـ anon key بتاعك هنا
+
+      signInForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+
+        const studentId = idInput.value.trim();
+        const password = passwordInput.value.trim();
+
+        if (!validateInput(studentId, password)) return;
+
+        const pwdEncoded = encodeURIComponent(password);
+
+        const url = `${BASE_URL}?student_id=eq.${studentId}&student_password=eq.${pwdEncoded}`;
+
+        try {
+          const response = await fetch(url, {
+            headers: {
+              apikey: API_KEY,
+              Authorization: `Bearer ${API_KEY}`,
+            },
+          });
+
+          const data = await response.json();
+
+          if (data.length > 0) {
+            sessionStorage.setItem("studentId", studentId);
+            window.location.href = "home.html";
+          } else {
+            alert("Password or ID is incorrect.");
+          }
+        } catch (err) {
+          console.error("Error:", err);
+          alert("There was an error. Please try again.");
+        }
+      });
+
+      // Handle sign-up form
+      const signUpForm = document.getElementById("signUpForm");
+      signUpForm.addEventListener("submit", function (event) {
+        event.preventDefault(); // Prevent form from submitting by default
+        const id = document.getElementById("signup-id").value;
+        const password = document.getElementById("signup-password").value;
+        const rePassword = document.getElementById("signup-repass").value;
+
+        // Validate the sign-up inputs
+        if (!validateInput(id, password)) {
+          return;
+        }
+
+        if (password !== rePassword) {
+          alert("Passwords do not match.");
+          return;
+        }
+        alert("Sign Up successful!");
+      });
+    </script>
+  </body>
+</html>

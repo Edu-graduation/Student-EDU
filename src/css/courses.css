@@ -47,9 +47,16 @@
 }
 
 @media screen and (max-width: 56.25em) {
+  .container {
+    height: auto;
+  }
+  .main-content {
+    overflow: visible;
+  }
   .courses__container {
     grid-template-columns: 1fr;
     grid-template-rows: auto;
+    justify-items: center;
     overflow: visible;
   }
   .line-sprator {

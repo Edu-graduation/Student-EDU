@@ -221,7 +221,7 @@
   border: none;
   padding: 1rem 2rem;
   background-color: transparent;
-  right: 12rem;
+  right: 2rem;
   color: var(--color-grey-light-1);
 }
 .message__input::placeholder {

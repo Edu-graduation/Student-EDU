@@ -269,7 +269,8 @@
             Start where you are. Use what you have. Do what you can.
             <span class="tip__icon">
               <img src="src/images/Courses/brain2.svg" alt="icon"
-            /></span>
+            />
+          </span>
           </div>
           <div class="user__photo-box">
             <img
@@ -314,31 +315,33 @@
           e.target.closest(".courses__modal") !== courseModal &&
           e.target === overlay
         ) {
+
           hideCourseModal();
+          sessionStorage.setItem("courseId", null);
         }
       });
       // console.log(supaClient);
 
       function getCourseImage(courseName) {
         const imageMap = {
-          "Programming": "src/images/Courses/Vector (1).svg",
-          "Database": "src/images/Courses/Vector (2).svg",
-          "MOT": "src/images/Courses/Vector (2).svg",
+          Programming: "src/images/Courses/Vector (1).svg",
+          Database: "src/images/Courses/Vector (2).svg",
+          MOT: "src/images/Courses/Vector (2).svg",
           "Java 1": "src/images/Courses/Vector (1).svg",
-          "Production": "src/images/Courses/Clip path group.svg",
+          Production: "src/images/Courses/Clip path group.svg",
           "SA&D": "src/images/Courses/Vector (3).svg",
           "Statistics Programs": "src/images/Courses/Clip path group (1).svg",
           "Critical Thinking": "src/images/Courses/brain2.svg",
-          "ITI": "src/images/Courses/iti.svg",
-          "QBA": "src/images/Courses/qa.svg",
-          "OOP": "src/images/Courses/oop.svg",
+          ITI: "src/images/Courses/iti.svg",
+          QBA: "src/images/Courses/qa.svg",
+          OOP: "src/images/Courses/oop.svg",
           "Cost Accounting": "src/images/Courses/Cost acc.svg",
-          "Entrepreneurship": "src/images/Courses/Entrepreneurship.svg",
-          "IDSS": "src/images/Courses/ai.png",
-          "AIS": "src/images/Courses/cloud.png",
-          "Tourism": "src/images/Courses/TOURISM.png",
-          "ECommerce": "src/images/Courses/ECOMMERCE.png",
-          "IIS": "src/images/Courses/erp.png",
+          Entrepreneurship: "src/images/Courses/Entrepreneurship.svg",
+          IDSS: "src/images/Courses/ai.png",
+          AIS: "src/images/Courses/cloud.png",
+          Tourism: "src/images/Courses/Tourism.png",
+          ECommerce: "src/images/Courses/ECOMMERCE.png",
+          IIS: "src/images/Courses/erp.png",
         };
 
         const path = imageMap[courseName] || "./images/Courses/brain2.svg";
@@ -424,8 +427,9 @@
             const coursesEl = document.querySelectorAll(".course");
 
             coursesEl.forEach((coursesEl) => {
+              
               coursesEl.addEventListener("click", (e) => {
-
+                
                 const courseId = e.target.closest(".course").dataset.courseId;
                 sessionStorage.setItem("courseId", courseId);
                 showCourseModal();

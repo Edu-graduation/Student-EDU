@@ -350,7 +350,19 @@
           return true;
         }
 
-        // Initialize timer
+        // Function to parse quiz_duration (HH:MM:SS) into minutes
+        function parseQuizDuration(durationStr) {
+          if (!durationStr) return 30; // Default to 30 minutes if duration is not provided
+          
+          // Split the duration string into hours, minutes, seconds (e.g., "00:20:00" → ["00", "20", "00"])
+          const [hours, minutes, seconds] = durationStr.split(":").map(Number);
+          
+          // Convert everything to minutes
+          const totalMinutes = hours * 60 + minutes + seconds / 60;
+          return totalMinutes || 30; // Return total minutes, or default to 30 if invalid
+        }
+
+        // Initialize timer with dynamic duration
         function startTimer(duration) {
           if (timerStarted) return;
           timerStarted = true;
@@ -388,7 +400,7 @@
           progressPercent.textContent = `${Math.round(progress)}%`;
         }
 
-        // Fetch quiz data for the specific course
+        // Fetch quiz data for the specific course, including quiz_duration
         async function fetchQuizData() {
           try {
             contentContainer.innerHTML =
@@ -397,7 +409,7 @@
             // First try to get quiz from Supabase client
             const { data, error } = await supaClient
               .from("quiz")
-              .select("*")
+              .select("*, quiz_duration") // Ensure quiz_duration is fetched
               .eq("course_id", courseId)
               .limit(1);
 
@@ -410,7 +422,7 @@
             }
 
             // Fallback to direct API call if no data from supaClient
-            const API_URL = `https://iuiwdjtmdeempcqxeuhf.supabase.co/rest/v1/quiz?course_id=eq.${courseId}`;
+            const API_URL = `https://iuiwdjtmdeempcqxeuhf.supabase.co/rest/v1/quiz?course_id=eq.${courseId}&select=*,quiz_duration`;
             const API_KEY =
               "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1aXdkanRtZGVlbXBjcXhldWhmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ3NTY1MDcsImV4cCI6MjA2MDMzMjUwN30.XfSmnKA8wbsXIA1qkfYaRkzxtEdudIDNYbSJu-M5Zag";
 
@@ -508,7 +520,8 @@
             radio.addEventListener("change", (e) => {
               selectedAnswers[currentQuestionIndex] = e.target.value;
               if (!timerStarted) {
-                const duration = quizData.time_limit || 30; // Default to 30 minutes if not specified
+                // Parse the quiz_duration (e.g., "00:20:00") into minutes
+                const duration = parseQuizDuration(quizData.quiz_duration);
                 startTimer(duration);
               }
               updateProgress();
@@ -629,7 +642,7 @@
 
           // Show the modal with quiz summary
           modalScoreDetails.innerHTML = `
- blossom            <p class="score">Total Questions: ${quizData.questions.length}</p>
+            <p class="score">Total Questions: ${quizData.questions.length}</p>
             <p class="score">Correct Answers: ${correctAnswers}/${quizData.questions.length}</p>
             <p class="score">Your score: ${score}/${totalPossibleScore} (${percentage.toFixed(
               2
